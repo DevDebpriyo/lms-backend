@@ -4,10 +4,10 @@ import authenticate from '../middleware/auth';
 
 const router = Router();
 
-router.post('/register', register);
-router.post('/login', login);
+router.post('/register', register); // sign up
+router.post('/login', login);  // sign in
 router.post('/refresh', refreshAccessToken);
-router.post('/logout', logout);
-router.get('/me', authenticate, me);
+router.post('/logout', logout); // sign out
+router.get('/me', authenticate, me); // profiles tab
 
 export default router;

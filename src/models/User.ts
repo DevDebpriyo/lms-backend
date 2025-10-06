@@ -1,4 +1,3 @@
-// src/models/User.ts
 import { Schema, model, Document } from 'mongoose';
 import bcrypt from 'bcrypt';
 
@@ -6,7 +5,6 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
-  role: string;
   avatar?: string;
   refreshToken?: string;
   comparePassword(candidate: string): Promise<boolean>;
@@ -17,18 +15,13 @@ const UserSchema = new Schema<IUser>(
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true },
     password: { type: String, required: true },
-    role: {
-      type: String,
-      enum: ['student', 'teacher', 'admin', 'parent', 'principal', 'superadmin'],
-      default: 'student',
-    },
     avatar: { type: String },
-    refreshToken: { type: String }, // stored for refresh flow
+    refreshToken: { type: String },
   },
   { timestamps: true }
 );
 
-// Hash password before save
+// Hash password before saving
 UserSchema.pre('save', async function (next) {
   const user = this as IUser;
   if (!user.isModified('password')) return next();
