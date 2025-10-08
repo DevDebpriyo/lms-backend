@@ -23,6 +23,21 @@ const createRefreshToken = (userId: string): string => {
   return jwt.sign({ userId }, secret, options);
 };
 
+const isProd = process.env.NODE_ENV === 'production';
+const refreshCookieOptions: {
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'lax' | 'none' | 'strict';
+  path: string;
+  maxAge: number;
+} = {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: isProd ? 'none' : 'lax',
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
 export const register = async (req: Request, res: Response) => {
   try {
     const { name, email, password } = req.body;
@@ -39,13 +54,8 @@ export const register = async (req: Request, res: Response) => {
     user.refreshToken = refreshToken;
     await user.save();
 
-    // Store refresh token in httpOnly cookie (recommended)
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    // Store refresh token in httpOnly cookie (cross-site compatible)
+    res.cookie('refreshToken', refreshToken, refreshCookieOptions);
 
     res.status(201).json({
       user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar },
@@ -74,12 +84,7 @@ export const login = async (req: Request, res: Response) => {
     user.refreshToken = refreshToken;
     await user.save();
 
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('refreshToken', refreshToken, refreshCookieOptions);
 
     res.json({
       user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar },
@@ -115,7 +120,13 @@ export const logout = async (req: Request, res: Response) => {
       const payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET as Secret) as JwtPayload & { userId: string };
       await User.findByIdAndUpdate(payload.userId, { $unset: { refreshToken: 1 } });
     }
-    res.clearCookie('refreshToken');
+    // Use matching options to reliably clear the cookie in browsers
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      path: '/',
+    });
     res.json({ message: 'Logged out' });
   } catch (err) {
     console.error(err);

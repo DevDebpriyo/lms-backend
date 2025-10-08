@@ -21,11 +21,20 @@ app.use(helmet());
 app.use(express.json());
 app.use(cookieParser());
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+// Allow credentials and an exact list of allowed origins (no trailing slashes)
+const allowedOrigins = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'https://authenti-text.vercel.app/')
+  .split(',')
+  .map((s) => s.trim().replace(/\/$/, ''));
+
 app.use(
   cors({
-    origin: FRONTEND_URL,
-    credentials: true, // allow cookies
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true); // non-browser or same-origin
+      const normalized = origin.replace(/\/$/, '');
+      if (allowedOrigins.includes(normalized)) return callback(null, true);
+      return callback(new Error(`Not allowed by CORS: ${origin}`));
+    },
+    credentials: true,
   })
 );
 
@@ -39,6 +48,8 @@ app.use(
 
 // routes
 app.use('/api/auth', authRoutes);
+// temporary alias to support clients calling "/auth" without the "/api" prefix
+app.use('/auth', authRoutes);
 
 app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
 
