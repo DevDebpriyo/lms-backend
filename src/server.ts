@@ -8,7 +8,11 @@ import { rateLimit } from 'express-rate-limit';
 import connectDB from './config/db';
 import authRoutes from './routes/auth';
 
-dotenv.config();
+if (process.env.NODE_ENV === 'production') {
+  dotenv.config({ path: '.env.production' });
+} else {
+  dotenv.config({ path: '.env.development' });
+}
 
 const app = express();
 
