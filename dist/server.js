@@ -59,6 +59,6 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 const PORT = process.env.PORT || 5000;
 const start = async () => {
     await (0, db_1.default)();
-    app.listen(PORT, () => console.log(`✅Server running on http://localhost:${PORT}`));
+    app.listen(PORT, () => console.log(`✅ Server running on http://localhost:${PORT}`));
 };
 start();

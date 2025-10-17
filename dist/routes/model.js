@@ -8,4 +8,5 @@ const modelController_1 = __importDefault(require("../controllers/modelControlle
 const router = express_1.default.Router();
 // POST /api/model/rephrase
 router.post('/rephrase', modelController_1.default.rephrase);
+router.post('/rephrase-options', modelController_1.default.rephraseOptions);
 exports.default = router;
