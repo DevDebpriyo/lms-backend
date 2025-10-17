@@ -22,28 +22,31 @@ const createRefreshToken = (userId) => {
     };
     return jsonwebtoken_1.default.sign({ userId }, secret, options);
 };
+const isProd = process.env.NODE_ENV === 'production';
+const refreshCookieOptions = {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+};
 const register = async (req, res) => {
     try {
-        const { name, email, password, role } = req.body;
+        const { name, email, password } = req.body;
         if (!name || !email || !password)
             return res.status(400).json({ message: 'Missing fields' });
         const existing = await User_1.default.findOne({ email });
         if (existing)
             return res.status(400).json({ message: 'Email already in use' });
-        const user = await User_1.default.create({ name, email, password, role });
+        const user = await User_1.default.create({ name, email, password });
         const accessToken = createAccessToken(user.id);
         const refreshToken = createRefreshToken(user.id);
         user.refreshToken = refreshToken;
         await user.save();
-        // Store refresh token in httpOnly cookie (recommended)
-        res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        // Store refresh token in httpOnly cookie (cross-site compatible)
+        res.cookie('refreshToken', refreshToken, refreshCookieOptions);
         res.status(201).json({
-            user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
+            user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar },
             accessToken,
         });
     }
@@ -68,14 +71,9 @@ const login = async (req, res) => {
         const refreshToken = createRefreshToken(user.id);
         user.refreshToken = refreshToken;
         await user.save();
-        res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        res.cookie('refreshToken', refreshToken, refreshCookieOptions);
         res.json({
-            user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
+            user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar },
             accessToken,
         });
     }
@@ -110,7 +108,13 @@ const logout = async (req, res) => {
             const payload = jsonwebtoken_1.default.verify(token, process.env.REFRESH_TOKEN_SECRET);
             await User_1.default.findByIdAndUpdate(payload.userId, { $unset: { refreshToken: 1 } });
         }
-        res.clearCookie('refreshToken');
+        // Use matching options to reliably clear the cookie in browsers
+        res.clearCookie('refreshToken', {
+            httpOnly: true,
+            secure: isProd,
+            sameSite: isProd ? 'none' : 'lax',
+            path: '/',
+        });
         res.json({ message: 'Logged out' });
     }
     catch (err) {

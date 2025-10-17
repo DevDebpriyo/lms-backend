@@ -7,11 +7,17 @@ import cookieParser from 'cookie-parser';
 import { rateLimit } from 'express-rate-limit';
 import connectDB from './config/db';
 import authRoutes from './routes/auth';
+import modelRoutes from './routes/model';
 
+// Load environment variables.
+// Use `.env.prod` for production and `.env` for development (these files exist in the repo).
 if (process.env.NODE_ENV === 'production') {
-  dotenv.config({ path: '.env.production' });
+  dotenv.config({ path: '.env.prod' });
+  console.log('Loaded environment from .env.prod');
 } else {
-  dotenv.config({ path: '.env.development' });
+  // default development file in this repo is `.env`
+  dotenv.config({ path: '.env' });
+  console.log('Loaded environment from .env');
 }
 
 const app = express();
@@ -51,13 +57,16 @@ app.use('/api/auth', authRoutes);
 // temporary alias to support clients calling "/auth" without the "/api" prefix
 app.use('/auth', authRoutes);
 
+// model routes
+app.use('/api/model', modelRoutes);
+
 app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
 
 const PORT = process.env.PORT || 5000;
 
 const start = async () => {
   await connectDB();
-  app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`✅ Server running on http://localhost:${PORT}`));
 };
 
 start();
