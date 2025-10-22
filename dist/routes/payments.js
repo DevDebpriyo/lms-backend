@@ -51,7 +51,15 @@ router.get('/products', async (_req, res) => {
         res.json(products.items);
     }
     catch (err) {
-        console.error(err);
+        const e = err;
+        console.error('[payments/products] Error', {
+            dodo_mode: dodopayments_1.dodoMeta.mode,
+            has_live_key: dodopayments_1.dodoMeta.hasLiveKey,
+            has_test_key: dodopayments_1.dodoMeta.hasTestKey,
+            status: e?.status,
+            name: e?.name,
+            message: e?.message,
+        });
         res.status(500).json({ error: 'Failed to fetch products' });
     }
 });
@@ -172,3 +180,13 @@ router.post('/webhook', async (req, res) => {
     }
 });
 exports.default = router;
+// DEBUG: Surface current Dodo mode/key presence and return_url used (no secrets).
+router.get('/debug', (_req, res) => {
+    res.json({
+        dodo_mode: dodopayments_1.dodoMeta.mode,
+        using: dodopayments_1.dodoMeta.using,
+        has_live_key: dodopayments_1.dodoMeta.hasLiveKey,
+        has_test_key: dodopayments_1.dodoMeta.hasTestKey,
+        return_url: RETURN_URL,
+    });
+});
