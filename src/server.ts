@@ -8,6 +8,7 @@ import { rateLimit } from 'express-rate-limit';
 import connectDB from './config/db';
 import authRoutes from './routes/auth';
 import modelRoutes from './routes/model';
+import paymentsRoutes from './routes/payments';
 
 // Load environment variables.
 // Use `.env.prod` for production and `.env` for development (these files exist in the repo).
@@ -24,6 +25,9 @@ const app = express();
 
 // middlewares
 app.use(helmet());
+// Raw body ONLY for webhook verification (must be before express.json)
+app.use('/api/payments/webhook', express.raw({ type: '*/*' }));
+// JSON parser for the rest of the app
 app.use(express.json());
 app.use(cookieParser());
 
@@ -59,6 +63,8 @@ app.use('/auth', authRoutes);
 
 // model routes
 app.use('/api/model', modelRoutes);
+// payments routes
+app.use('/api/payments', paymentsRoutes);
 
 app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
 

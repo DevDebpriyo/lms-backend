@@ -13,6 +13,7 @@ const express_rate_limit_1 = require("express-rate-limit");
 const db_1 = __importDefault(require("./config/db"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const model_1 = __importDefault(require("./routes/model"));
+const payments_1 = __importDefault(require("./routes/payments"));
 // Load environment variables.
 // Use `.env.prod` for production and `.env` for development (these files exist in the repo).
 if (process.env.NODE_ENV === 'production') {
@@ -27,6 +28,9 @@ else {
 const app = (0, express_1.default)();
 // middlewares
 app.use((0, helmet_1.default)());
+// Raw body ONLY for webhook verification (must be before express.json)
+app.use('/api/payments/webhook', express_1.default.raw({ type: '*/*' }));
+// JSON parser for the rest of the app
 app.use(express_1.default.json());
 app.use((0, cookie_parser_1.default)());
 // Allow credentials and an exact list of allowed origins (no trailing slashes)
@@ -55,6 +59,8 @@ app.use('/api/auth', auth_1.default);
 app.use('/auth', auth_1.default);
 // model routes
 app.use('/api/model', model_1.default);
+// payments routes
+app.use('/api/payments', payments_1.default);
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 const PORT = process.env.PORT || 5000;
 const start = async () => {
