@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import { Webhook } from 'standardwebhooks';
-import dodopayments from '../services/dodopayments';
+import dodopayments, { dodoMeta } from '../services/dodopayments';
 import { getFrontendBaseUrl } from '../utils/url';
 
 const router = express.Router();
@@ -120,9 +120,22 @@ router.post('/webhook', async (req: Request, res: Response) => {
     }
 
     return res.status(200).json({ message: 'Webhook processed successfully' });
-  } catch (error) {
-    console.log('----- webhook verification failed -----');
-    console.log(error);
+  } catch (error: any) {
+    console.log('----- webhook processing error -----');
+    console.log({
+      dodo_mode: dodoMeta.mode,
+      has_live_key: dodoMeta.hasLiveKey,
+      has_test_key: dodoMeta.hasTestKey,
+      status: error?.status,
+      name: error?.name,
+      message: error?.message,
+    });
+    if (error?.status === 401) {
+      console.log('Dodo API returned 401. Likely causes:');
+      console.log('- Environment mismatch (using live_mode with a test key or vice versa).');
+      console.log('- Missing DODO_API_KEY_LIVE/DODO_API_KEY_TEST for the selected mode.');
+      console.log('- Set DODO_ENV=test on Render if you want to use your TEST key in production deploys.');
+    }
     // Acknowledge to avoid retries while integrating; adjust to 400 if you want retries
     return res.status(200).json({ message: 'Webhook processed successfully' });
   }

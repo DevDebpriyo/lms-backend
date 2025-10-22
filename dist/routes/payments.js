@@ -1,11 +1,44 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const standardwebhooks_1 = require("standardwebhooks");
-const dodopayments_1 = __importDefault(require("../services/dodopayments"));
+const dodopayments_1 = __importStar(require("../services/dodopayments"));
 const url_1 = require("../utils/url");
 const router = express_1.default.Router();
 const webhookSecret = process.env.DODO_PAYMENTS_WEBHOOK_KEY;
@@ -119,8 +152,21 @@ router.post('/webhook', async (req, res) => {
         return res.status(200).json({ message: 'Webhook processed successfully' });
     }
     catch (error) {
-        console.log('----- webhook verification failed -----');
-        console.log(error);
+        console.log('----- webhook processing error -----');
+        console.log({
+            dodo_mode: dodopayments_1.dodoMeta.mode,
+            has_live_key: dodopayments_1.dodoMeta.hasLiveKey,
+            has_test_key: dodopayments_1.dodoMeta.hasTestKey,
+            status: error?.status,
+            name: error?.name,
+            message: error?.message,
+        });
+        if (error?.status === 401) {
+            console.log('Dodo API returned 401. Likely causes:');
+            console.log('- Environment mismatch (using live_mode with a test key or vice versa).');
+            console.log('- Missing DODO_API_KEY_LIVE/DODO_API_KEY_TEST for the selected mode.');
+            console.log('- Set DODO_ENV=test on Render if you want to use your TEST key in production deploys.');
+        }
         // Acknowledge to avoid retries while integrating; adjust to 400 if you want retries
         return res.status(200).json({ message: 'Webhook processed successfully' });
     }
