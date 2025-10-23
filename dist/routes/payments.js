@@ -226,6 +226,7 @@ router.post('/webhook', async (req, res) => {
                             subscription: {
                                 isActive: subscription?.status === 'active',
                                 plan: plan || null,
+                                interval: plan ? (plan === 'yearly' ? 'year' : 'month') : ((0, dodo_1.inferPlanFromInterval)(subscription?.subscription_period_interval) || (0, dodo_1.inferPlanFromInterval)(subscription?.payment_frequency_interval)) || null,
                                 productId: subscription?.product_id || null,
                                 subscriptionId: subscription?.subscription_id || null,
                                 status: subscription?.status || null,

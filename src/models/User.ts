@@ -17,6 +17,7 @@ export interface IUser extends Document {
   subscription?: {
     isActive: boolean;
     plan?: 'monthly' | 'yearly' | null;
+    interval?: 'month' | 'year' | null;
     productId?: string | null;
     subscriptionId?: string | null;
     status?: string | null;
@@ -53,6 +54,7 @@ const UserSchema = new Schema<IUser>(
     subscription: {
       isActive: { type: Boolean, default: false },
       plan: { type: String, enum: ['monthly', 'yearly', null], default: null },
+      interval: { type: String, enum: ['month', 'year', null], default: null },
       productId: { type: String, default: null },
       subscriptionId: { type: String, default: null },
       status: { type: String, default: null },

@@ -6,6 +6,7 @@ import jwt, { JwtPayload, Secret, SignOptions } from 'jsonwebtoken';
 const asExpires = (value: string | undefined, fallback: string): SignOptions['expiresIn'] =>
   (value ?? fallback) as SignOptions['expiresIn'];
 import User from '../models/User';
+import { mapProductToPlan } from '../utils/dodo';
 
 const createAccessToken = (userId: string): string => {
   const secret = process.env.JWT_SECRET as Secret;
@@ -142,17 +143,12 @@ export const me = async (req: Request, res: Response) => {
     // Normalize response to the frontend contract
     const u: any = user.toObject();
 
-    const planName = u?.subscription?.plan === 'yearly'
-      ? 'Yearly'
-      : u?.subscription?.plan === 'monthly'
-      ? 'Monthly'
-      : undefined;
+    // Determine interval/name robustly: prefer stored interval, then plan, then product mapping
+    const intervalFromDoc: any = u?.subscription?.interval || (u?.subscription?.plan === 'yearly' ? 'year' : u?.subscription?.plan === 'monthly' ? 'month' : undefined);
+    const intervalFromProduct: any = !intervalFromDoc && u?.subscription?.productId ? (mapProductToPlan(u.subscription.productId) === 'yearly' ? 'year' : mapProductToPlan(u.subscription.productId) === 'monthly' ? 'month' : undefined) : undefined;
+    const planInterval = intervalFromDoc || intervalFromProduct;
 
-    const planInterval = u?.subscription?.plan === 'yearly'
-      ? 'year'
-      : u?.subscription?.plan === 'monthly'
-      ? 'month'
-      : undefined;
+    const planName = planInterval === 'year' ? 'Yearly' : planInterval === 'month' ? 'Monthly' : undefined;
 
     const monthlyPrice = Number(process.env.PLAN_PRICE_MONTHLY || 29);
     const yearlyPrice = Number(process.env.PLAN_PRICE_YEARLY || 289);
@@ -160,7 +156,7 @@ export const me = async (req: Request, res: Response) => {
 
     // Map Dodo-like status to UI expectations
     // active | trialing | past_due | canceled | inactive
-    const rawStatus: string | undefined = u?.subscription?.status || (u?.subscription?.isActive ? 'active' : 'inactive');
+  const rawStatus: string | undefined = u?.subscription?.status || (u?.subscription?.isActive ? 'active' : 'inactive');
     let status = 'inactive';
     if (rawStatus) {
       const s = rawStatus.toLowerCase();

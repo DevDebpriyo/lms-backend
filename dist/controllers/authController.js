@@ -8,6 +8,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 // Helper to coerce env strings to the type expected by jsonwebtoken for expiresIn
 const asExpires = (value, fallback) => (value ?? fallback);
 const User_1 = __importDefault(require("../models/User"));
+const dodo_1 = require("../utils/dodo");
 const createAccessToken = (userId) => {
     const secret = process.env.JWT_SECRET;
     const options = {
@@ -131,16 +132,11 @@ const me = async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         // Normalize response to the frontend contract
         const u = user.toObject();
-        const planName = u?.subscription?.plan === 'yearly'
-            ? 'Yearly'
-            : u?.subscription?.plan === 'monthly'
-                ? 'Monthly'
-                : undefined;
-        const planInterval = u?.subscription?.plan === 'yearly'
-            ? 'year'
-            : u?.subscription?.plan === 'monthly'
-                ? 'month'
-                : undefined;
+        // Determine interval/name robustly: prefer stored interval, then plan, then product mapping
+        const intervalFromDoc = u?.subscription?.interval || (u?.subscription?.plan === 'yearly' ? 'year' : u?.subscription?.plan === 'monthly' ? 'month' : undefined);
+        const intervalFromProduct = !intervalFromDoc && u?.subscription?.productId ? ((0, dodo_1.mapProductToPlan)(u.subscription.productId) === 'yearly' ? 'year' : (0, dodo_1.mapProductToPlan)(u.subscription.productId) === 'monthly' ? 'month' : undefined) : undefined;
+        const planInterval = intervalFromDoc || intervalFromProduct;
+        const planName = planInterval === 'year' ? 'Yearly' : planInterval === 'month' ? 'Monthly' : undefined;
         const monthlyPrice = Number(process.env.PLAN_PRICE_MONTHLY || 29);
         const yearlyPrice = Number(process.env.PLAN_PRICE_YEARLY || 289);
         const planPrice = planInterval === 'year' ? yearlyPrice : planInterval === 'month' ? monthlyPrice : undefined;

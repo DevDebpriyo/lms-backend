@@ -206,6 +206,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
               subscription: {
                 isActive: subscription?.status === 'active',
                 plan: plan || null,
+                interval: plan ? (plan === 'yearly' ? 'year' : 'month') : (inferPlanFromInterval(subscription?.subscription_period_interval) || inferPlanFromInterval(subscription?.payment_frequency_interval)) || null,
                 productId: subscription?.product_id || null,
                 subscriptionId: subscription?.subscription_id || null,
                 status: subscription?.status || null,
