@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getFrontendBaseUrl = getFrontendBaseUrl;
 exports.parseAllowedOrigins = parseAllowedOrigins;
+exports.buildReturnUrl = buildReturnUrl;
 /**
  * Derive a single frontend base URL to use as return_url.
  * Supports comma-separated FRONTEND_URLS or FRONTEND_URL values and tolerates trailing slashes.
@@ -26,4 +27,12 @@ function parseAllowedOrigins() {
         .map((s) => s.trim())
         .filter(Boolean)
         .map((s) => s.replace(/\/$/, ''));
+}
+/** Join a base URL with a path, handling trailing/leading slashes gracefully. */
+function buildReturnUrl(path) {
+    const base = getFrontendBaseUrl();
+    if (!base)
+        return undefined;
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `${base}${cleanPath}`;
 }

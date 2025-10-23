@@ -47,8 +47,65 @@ const RETURN_URL = (0, url_1.getFrontendBaseUrl)();
 // GET /api/payments/products
 router.get('/products', async (_req, res) => {
     try {
+        const monthlyEnv = process.env.DODO_PRODUCT_MONTHLY_ID || process.env.DODO_MONTHLY_PRODUCT_ID;
+        const yearlyEnv = process.env.DODO_PRODUCT_YEARLY_ID || process.env.DODO_YEARLY_PRODUCT_ID;
+        // 1) If both env IDs are provided, return exactly two normalized products
+        if (monthlyEnv && yearlyEnv) {
+            return res.json([
+                { id: String(monthlyEnv), name: 'Monthly', interval: 'month' },
+                { id: String(yearlyEnv), name: 'Yearly', interval: 'year' },
+            ]);
+        }
+        // 2) Else, fetch from Dodo and infer the monthly/yearly products
         const products = await dodopayments_1.default.products.list();
-        res.json(products.items);
+        const items = products?.items || [];
+        const normalizeId = (p) => (p?.product_id ?? p?.id ?? p?._id)?.toString();
+        const getInterval = (p) => {
+            const fields = [
+                p?.interval,
+                p?.billing_interval,
+                p?.billingInterval,
+                p?.billingCycle,
+                p?.recurring_interval,
+                p?.period,
+            ];
+            const intervalRaw = String(fields.find((x) => x) || '').toLowerCase();
+            if (intervalRaw.includes('month'))
+                return 'month';
+            if (intervalRaw.includes('year') || intervalRaw.includes('annual'))
+                return 'year';
+            const nameRaw = String(p?.name || p?.title || p?.planName || p?.displayName || p?.plan || p?.slug || '').toLowerCase();
+            if (nameRaw.includes('month'))
+                return 'month';
+            if (nameRaw.includes('year') || nameRaw.includes('annual'))
+                return 'year';
+            return undefined;
+        };
+        const findBy = (want) => items.find((p) => getInterval(p) === want) ||
+            items.find((p) => {
+                const name = String(p?.name || p?.title || p?.planName || p?.displayName || p?.plan || p?.slug || '').toLowerCase();
+                return want === 'month' ? name.includes('month') : name.includes('year') || name.includes('annual');
+            });
+        const monthly = monthlyEnv ? { product_id: monthlyEnv } : findBy('month');
+        const yearly = yearlyEnv ? { product_id: yearlyEnv } : findBy('year');
+        const monthlyId = monthlyEnv || normalizeId(monthly);
+        const yearlyId = yearlyEnv || normalizeId(yearly);
+        if (!monthlyId || !yearlyId) {
+            console.error('[payments/products] Could not infer monthly/yearly products', {
+                dodo_mode: dodopayments_1.dodoMeta.mode,
+                has_live_key: dodopayments_1.dodoMeta.hasLiveKey,
+                has_test_key: dodopayments_1.dodoMeta.hasTestKey,
+                available: items.map((p) => ({ id: normalizeId(p), name: p?.name, title: p?.title, slug: p?.slug, interval: getInterval(p) })),
+            });
+            return res.status(500).json({
+                error: 'Monthly/Yearly products not found',
+                hint: 'Set DODO_PRODUCT_MONTHLY_ID and DODO_PRODUCT_YEARLY_ID env vars to override or ensure product names/intervals contain month/year.',
+            });
+        }
+        return res.json([
+            { id: String(monthlyId), name: 'Monthly', interval: 'month' },
+            { id: String(yearlyId), name: 'Yearly', interval: 'year' },
+        ]);
     }
     catch (err) {
         const e = err;
@@ -76,7 +133,7 @@ router.get('/checkout/onetime', async (req, res) => {
             customer: { email: '', name: '' },
             payment_link: true,
             product_cart: [productWithQuantity],
-            return_url: RETURN_URL,
+            return_url: (0, url_1.buildReturnUrl)('/profile'),
         });
         res.json(response);
     }
@@ -103,7 +160,7 @@ router.get('/checkout/subscription', async (req, res) => {
             payment_link: true,
             product_id: productId,
             quantity: 1,
-            return_url: RETURN_URL,
+            return_url: (0, url_1.buildReturnUrl)('/profile'),
         });
         res.json(response);
     }
@@ -187,6 +244,59 @@ router.get('/debug', (_req, res) => {
         using: dodopayments_1.dodoMeta.using,
         has_live_key: dodopayments_1.dodoMeta.hasLiveKey,
         has_test_key: dodopayments_1.dodoMeta.hasTestKey,
-        return_url: RETURN_URL,
+        return_url: (0, url_1.buildReturnUrl)('/profile'),
     });
+});
+// GET /api/payments/checkout/subscription/plan?plan=monthly|yearly[&returnPath=/profile]
+// Uses environment variables to map plan -> product_id
+//   DODO_MONTHLY_PRODUCT_ID, DODO_YEARLY_PRODUCT_ID
+router.get('/checkout/subscription/plan', async (req, res) => {
+    try {
+        const plan = String(req.query.plan || '').toLowerCase();
+        const returnPath = typeof req.query.returnPath === 'string' ? req.query.returnPath : '/profile';
+        const monthlyId = process.env.DODO_MONTHLY_PRODUCT_ID;
+        const yearlyId = process.env.DODO_YEARLY_PRODUCT_ID;
+        let productId;
+        if (plan === 'monthly')
+            productId = monthlyId || undefined;
+        if (plan === 'yearly')
+            productId = yearlyId || undefined;
+        if (!plan || !productId) {
+            return res.status(400).json({
+                error: 'Invalid plan or product mapping missing',
+                details: {
+                    plan,
+                    has_monthly_id: Boolean(monthlyId),
+                    has_yearly_id: Boolean(yearlyId),
+                    expected_envs: ['DODO_MONTHLY_PRODUCT_ID', 'DODO_YEARLY_PRODUCT_ID'],
+                },
+            });
+        }
+        const response = await dodopayments_1.default.subscriptions.create({
+            billing: {
+                city: 'Sydney',
+                country: 'AU',
+                state: 'New South Wales',
+                street: '1, Random address',
+                zipcode: '2000',
+            },
+            customer: { email: 'test@example.com', name: 'Customer Name' },
+            payment_link: true,
+            product_id: productId,
+            quantity: 1,
+            return_url: (0, url_1.buildReturnUrl)(returnPath),
+        });
+        return res.json(response);
+    }
+    catch (e) {
+        console.error('[checkout/subscription/plan] Error', {
+            dodo_mode: dodopayments_1.dodoMeta.mode,
+            has_live_key: dodopayments_1.dodoMeta.hasLiveKey,
+            has_test_key: dodopayments_1.dodoMeta.hasTestKey,
+            status: e?.status,
+            name: e?.name,
+            message: e?.message,
+        });
+        return res.status(500).json({ error: 'Failed to create subscription payment link' });
+    }
 });

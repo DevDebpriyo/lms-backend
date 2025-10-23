@@ -13,8 +13,72 @@ const RETURN_URL = getFrontendBaseUrl();
 // GET /api/payments/products
 router.get('/products', async (_req: Request, res: Response) => {
   try {
+    const monthlyEnv = process.env.DODO_PRODUCT_MONTHLY_ID || process.env.DODO_MONTHLY_PRODUCT_ID;
+    const yearlyEnv = process.env.DODO_PRODUCT_YEARLY_ID || process.env.DODO_YEARLY_PRODUCT_ID;
+
+    // 1) If both env IDs are provided, return exactly two normalized products
+    if (monthlyEnv && yearlyEnv) {
+      return res.json([
+        { id: String(monthlyEnv), name: 'Monthly', interval: 'month' },
+        { id: String(yearlyEnv), name: 'Yearly', interval: 'year' },
+      ]);
+    }
+
+    // 2) Else, fetch from Dodo and infer the monthly/yearly products
     const products = await dodopayments.products.list();
-    res.json(products.items);
+    const items: any[] = products?.items || [];
+
+    const normalizeId = (p: any): string | undefined =>
+      (p?.product_id ?? p?.id ?? p?._id)?.toString();
+
+    const getInterval = (p: any): 'month' | 'year' | undefined => {
+      const fields = [
+        p?.interval,
+        p?.billing_interval,
+        p?.billingInterval,
+        p?.billingCycle,
+        p?.recurring_interval,
+        p?.period,
+      ];
+      const intervalRaw = String(fields.find((x: any) => x) || '').toLowerCase();
+      if (intervalRaw.includes('month')) return 'month';
+      if (intervalRaw.includes('year') || intervalRaw.includes('annual')) return 'year';
+      const nameRaw = String(p?.name || p?.title || p?.planName || p?.displayName || p?.plan || p?.slug || '').toLowerCase();
+      if (nameRaw.includes('month')) return 'month';
+      if (nameRaw.includes('year') || nameRaw.includes('annual')) return 'year';
+      return undefined;
+    };
+
+    const findBy = (want: 'month' | 'year') =>
+      items.find((p) => getInterval(p) === want) ||
+      items.find((p) => {
+        const name = String(p?.name || p?.title || p?.planName || p?.displayName || p?.plan || p?.slug || '').toLowerCase();
+        return want === 'month' ? name.includes('month') : name.includes('year') || name.includes('annual');
+      });
+
+    const monthly = monthlyEnv ? { product_id: monthlyEnv } : findBy('month');
+    const yearly = yearlyEnv ? { product_id: yearlyEnv } : findBy('year');
+
+    const monthlyId = monthlyEnv || normalizeId(monthly);
+    const yearlyId = yearlyEnv || normalizeId(yearly);
+
+    if (!monthlyId || !yearlyId) {
+      console.error('[payments/products] Could not infer monthly/yearly products', {
+        dodo_mode: dodoMeta.mode,
+        has_live_key: dodoMeta.hasLiveKey,
+        has_test_key: dodoMeta.hasTestKey,
+        available: items.map((p) => ({ id: normalizeId(p), name: p?.name, title: p?.title, slug: p?.slug, interval: getInterval(p) })),
+      });
+      return res.status(500).json({
+        error: 'Monthly/Yearly products not found',
+        hint: 'Set DODO_PRODUCT_MONTHLY_ID and DODO_PRODUCT_YEARLY_ID env vars to override or ensure product names/intervals contain month/year.',
+      });
+    }
+
+    return res.json([
+      { id: String(monthlyId), name: 'Monthly', interval: 'month' },
+      { id: String(yearlyId), name: 'Yearly', interval: 'year' },
+    ]);
   } catch (err) {
     const e: any = err;
     console.error('[payments/products] Error', {
@@ -43,7 +107,7 @@ router.get('/checkout/onetime', async (req: Request, res: Response) => {
       customer: { email: '', name: '' },
       payment_link: true,
       product_cart: [productWithQuantity],
-      return_url: RETURN_URL,
+  return_url: buildReturnUrl('/profile'),
     });
     res.json(response);
   } catch (err) {
@@ -70,7 +134,7 @@ router.get('/checkout/subscription', async (req: Request, res: Response) => {
       payment_link: true,
       product_id: productId,
       quantity: 1,
-      return_url: RETURN_URL,
+  return_url: buildReturnUrl('/profile'),
     });
     res.json(response);
   } catch (err) {
@@ -158,7 +222,7 @@ router.get('/debug', (_req: Request, res: Response) => {
     using: dodoMeta.using,
     has_live_key: dodoMeta.hasLiveKey,
     has_test_key: dodoMeta.hasTestKey,
-    return_url: RETURN_URL,
+    return_url: buildReturnUrl('/profile'),
   });
 });
 
