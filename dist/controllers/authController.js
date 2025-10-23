@@ -129,7 +129,57 @@ const me = async (req, res) => {
         const user = await User_1.default.findById(userId).select('-password -refreshToken');
         if (!user)
             return res.status(404).json({ message: 'User not found' });
-        res.json({ user });
+        // Normalize response to the frontend contract
+        const u = user.toObject();
+        const planName = u?.subscription?.plan === 'yearly'
+            ? 'Yearly'
+            : u?.subscription?.plan === 'monthly'
+                ? 'Monthly'
+                : undefined;
+        const planInterval = u?.subscription?.plan === 'yearly'
+            ? 'year'
+            : u?.subscription?.plan === 'monthly'
+                ? 'month'
+                : undefined;
+        const monthlyPrice = Number(process.env.PLAN_PRICE_MONTHLY || 29);
+        const yearlyPrice = Number(process.env.PLAN_PRICE_YEARLY || 289);
+        const planPrice = planInterval === 'year' ? yearlyPrice : planInterval === 'month' ? monthlyPrice : undefined;
+        // Map Dodo-like status to UI expectations
+        // active | trialing | past_due | canceled | inactive
+        const rawStatus = u?.subscription?.status || (u?.subscription?.isActive ? 'active' : 'inactive');
+        let status = 'inactive';
+        if (rawStatus) {
+            const s = rawStatus.toLowerCase();
+            if (s.includes('active'))
+                status = 'active';
+            else if (s.includes('trial'))
+                status = 'trialing';
+            else if (s.includes('past_due') || s.includes('past'))
+                status = 'past_due';
+            else if (s.includes('cancel'))
+                status = 'canceled';
+            else
+                status = u?.subscription?.isActive ? 'active' : 'inactive';
+        }
+        const normalized = {
+            id: String(u._id),
+            name: u.name,
+            email: u.email,
+            avatar: u.avatar ?? null,
+            createdAt: (u.createdAt instanceof Date ? u.createdAt : new Date(u.createdAt)).toISOString(),
+            emailVerified: Boolean(u.emailVerified ?? false),
+            subscription: u.subscription
+                ? {
+                    status,
+                    plan: planName && planInterval && planPrice != null
+                        ? { name: planName, interval: planInterval, price: planPrice }
+                        : undefined,
+                    currentPeriodEnd: u.subscription.nextBillingDate ? new Date(u.subscription.nextBillingDate).toISOString() : null,
+                    cancelAtPeriodEnd: typeof u.subscription.cancelAtPeriodEnd === 'boolean' ? u.subscription.cancelAtPeriodEnd : false,
+                }
+                : undefined,
+        };
+        res.json({ user: normalized });
     }
     catch (err) {
         console.error(err);

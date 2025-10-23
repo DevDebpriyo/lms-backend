@@ -28,6 +28,7 @@ const UserSchema = new mongoose_1.Schema({
         nextBillingDate: { type: Date, default: null },
         previousBillingDate: { type: Date, default: null },
         createdAt: { type: Date, default: null },
+        cancelAtPeriodEnd: { type: Boolean, default: null },
         lastPaymentId: { type: String, default: null },
         paymentMethod: { type: String, default: null },
         cardLast4: { type: String, default: null },

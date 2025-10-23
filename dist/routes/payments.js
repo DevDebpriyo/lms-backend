@@ -222,6 +222,7 @@ router.post('/webhook', async (req, res) => {
                                 nextBillingDate: subscription?.next_billing_date ? new Date(subscription.next_billing_date) : null,
                                 previousBillingDate: subscription?.previous_billing_date ? new Date(subscription.previous_billing_date) : null,
                                 createdAt: subscription?.created_at ? new Date(subscription.created_at) : null,
+                                cancelAtPeriodEnd: typeof subscription?.cancel_at_next_billing_date === 'boolean' ? subscription.cancel_at_next_billing_date : null,
                                 dodoCustomerId: subscription?.customer?.customer_id || null,
                                 updatedAt: new Date(),
                             },
