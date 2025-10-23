@@ -21,3 +21,11 @@ export function parseAllowedOrigins(): string[] {
     .filter(Boolean)
     .map((s) => s.replace(/\/$/, ''));
 }
+
+/** Join a base URL with a path, handling trailing/leading slashes gracefully. */
+export function buildReturnUrl(path: string): string | undefined {
+  const base = getFrontendBaseUrl();
+  if (!base) return undefined;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${cleanPath}`;
+}

@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { Webhook } from 'standardwebhooks';
 import dodopayments, { dodoMeta } from '../services/dodopayments';
-import { getFrontendBaseUrl } from '../utils/url';
+import { getFrontendBaseUrl, buildReturnUrl } from '../utils/url';
 
 const router = express.Router();
 
@@ -160,4 +160,59 @@ router.get('/debug', (_req: Request, res: Response) => {
     has_test_key: dodoMeta.hasTestKey,
     return_url: RETURN_URL,
   });
+});
+
+// GET /api/payments/checkout/subscription/plan?plan=monthly|yearly[&returnPath=/profile]
+// Uses environment variables to map plan -> product_id
+//   DODO_MONTHLY_PRODUCT_ID, DODO_YEARLY_PRODUCT_ID
+router.get('/checkout/subscription/plan', async (req: Request, res: Response) => {
+  try {
+    const plan = String(req.query.plan || '').toLowerCase();
+    const returnPath = typeof req.query.returnPath === 'string' ? req.query.returnPath : '/profile';
+    const monthlyId = process.env.DODO_MONTHLY_PRODUCT_ID;
+    const yearlyId = process.env.DODO_YEARLY_PRODUCT_ID;
+
+    let productId: string | undefined;
+    if (plan === 'monthly') productId = monthlyId || undefined;
+    if (plan === 'yearly') productId = yearlyId || undefined;
+
+    if (!plan || !productId) {
+      return res.status(400).json({
+        error: 'Invalid plan or product mapping missing',
+        details: {
+          plan,
+          has_monthly_id: Boolean(monthlyId),
+          has_yearly_id: Boolean(yearlyId),
+          expected_envs: ['DODO_MONTHLY_PRODUCT_ID', 'DODO_YEARLY_PRODUCT_ID'],
+        },
+      });
+    }
+
+    const response = await dodopayments.subscriptions.create({
+      billing: {
+        city: 'Sydney',
+        country: 'AU',
+        state: 'New South Wales',
+        street: '1, Random address',
+        zipcode: '2000',
+      },
+      customer: { email: 'test@example.com', name: 'Customer Name' },
+      payment_link: true,
+      product_id: productId,
+      quantity: 1,
+      return_url: buildReturnUrl(returnPath),
+    });
+
+    return res.json(response);
+  } catch (e: any) {
+    console.error('[checkout/subscription/plan] Error', {
+      dodo_mode: dodoMeta.mode,
+      has_live_key: dodoMeta.hasLiveKey,
+      has_test_key: dodoMeta.hasTestKey,
+      status: e?.status,
+      name: e?.name,
+      message: e?.message,
+    });
+    return res.status(500).json({ error: 'Failed to create subscription payment link' });
+  }
 });
