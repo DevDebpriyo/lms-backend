@@ -167,6 +167,8 @@ export const me = async (req: Request, res: Response) => {
       else status = u?.subscription?.isActive ? 'active' : 'inactive';
     }
 
+    const subscriptionDoc = u.subscription || {};
+
     const normalized = {
       id: String(u._id),
       name: u.name,
@@ -174,16 +176,28 @@ export const me = async (req: Request, res: Response) => {
       avatar: u.avatar ?? null,
       createdAt: (u.createdAt instanceof Date ? u.createdAt : new Date(u.createdAt)).toISOString(),
       emailVerified: Boolean(u.emailVerified ?? false),
-      subscription: u.subscription
-        ? {
-            status,
-            plan: planName && planInterval && planPrice != null
-              ? { name: planName, interval: planInterval, price: planPrice }
-              : undefined,
-            currentPeriodEnd: u.subscription.nextBillingDate ? new Date(u.subscription.nextBillingDate).toISOString() : null,
-            cancelAtPeriodEnd: typeof u.subscription.cancelAtPeriodEnd === 'boolean' ? u.subscription.cancelAtPeriodEnd : false,
-          }
-        : undefined,
+      subscription: {
+        // normalized high-level status
+        status,
+        // plan best-effort: include nulls when unknown so frontend can handle gracefully
+        plan: {
+          name: planName ?? null,
+          interval: planInterval ?? null,
+          price: planPrice ?? null,
+        },
+        // raw identifiers and billing/payment metadata
+        productId: subscriptionDoc.productId ?? null,
+        subscriptionId: subscriptionDoc.subscriptionId ?? null,
+        lastPaymentId: subscriptionDoc.lastPaymentId ?? null,
+        paymentMethod: subscriptionDoc.paymentMethod ?? null,
+        cardLast4: subscriptionDoc.cardLast4 ?? null,
+        currency: subscriptionDoc.currency ?? null,
+        // dates
+        subscriptionCreatedAt: subscriptionDoc.createdAt ? (subscriptionDoc.createdAt instanceof Date ? subscriptionDoc.createdAt : new Date(subscriptionDoc.createdAt)).toISOString() : null,
+        previousPeriodEnd: subscriptionDoc.previousBillingDate ? (subscriptionDoc.previousBillingDate instanceof Date ? subscriptionDoc.previousBillingDate : new Date(subscriptionDoc.previousBillingDate)).toISOString() : null,
+        currentPeriodEnd: subscriptionDoc.nextBillingDate ? (subscriptionDoc.nextBillingDate instanceof Date ? subscriptionDoc.nextBillingDate : new Date(subscriptionDoc.nextBillingDate)).toISOString() : null,
+        cancelAtPeriodEnd: typeof subscriptionDoc.cancelAtPeriodEnd === 'boolean' ? subscriptionDoc.cancelAtPeriodEnd : false,
+      },
     };
 
     res.json({ user: normalized });
