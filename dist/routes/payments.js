@@ -40,6 +40,7 @@ const express_1 = __importDefault(require("express"));
 const standardwebhooks_1 = require("standardwebhooks");
 const dodopayments_1 = __importStar(require("../services/dodopayments"));
 const User_1 = __importDefault(require("../models/User"));
+const auth_1 = __importDefault(require("../middleware/auth"));
 const dodo_1 = require("../utils/dodo");
 const url_1 = require("../utils/url");
 const router = express_1.default.Router();
@@ -129,16 +130,21 @@ router.get('/products', async (_req, res) => {
     }
 });
 // GET /api/payments/checkout/onetime?productId=123
-router.get('/checkout/onetime', async (req, res) => {
+router.get('/checkout/onetime', auth_1.default, async (req, res) => {
     try {
         const productId = String(req.query.productId || '');
         if (!productId)
             return res.status(400).json({ error: 'Missing productId' });
+        // Identify current user to pass correct email/name to Dodo
+        const userId = req.userId;
+        const user = userId ? await User_1.default.findById(userId).select('email name') : null;
+        if (!user)
+            return res.status(401).json({ error: 'Unauthorized' });
         const productWithQuantity = { product_id: productId, quantity: 1 };
         const response = await dodopayments_1.default.payments.create({
             // TODO: Collect these details from your frontend and pass through.
             billing: { city: '', country: 'US', state: '', street: '', zipcode: '' },
-            customer: { email: '', name: '' },
+            customer: { email: user.email, name: user.name || user.email },
             payment_link: true,
             product_cart: [productWithQuantity],
             return_url: resolveReturnUrl(req),
@@ -151,11 +157,16 @@ router.get('/checkout/onetime', async (req, res) => {
     }
 });
 // GET /api/payments/checkout/subscription?productId=123
-router.get('/checkout/subscription', async (req, res) => {
+router.get('/checkout/subscription', auth_1.default, async (req, res) => {
     try {
         const productId = String(req.query.productId || '');
         if (!productId)
             return res.status(400).json({ error: 'Missing productId' });
+        // Identify current user to pass correct email/name to Dodo
+        const userId = req.userId;
+        const user = userId ? await User_1.default.findById(userId).select('email name') : null;
+        if (!user)
+            return res.status(401).json({ error: 'Unauthorized' });
         const response = await dodopayments_1.default.subscriptions.create({
             billing: {
                 city: 'Sydney',
@@ -164,7 +175,7 @@ router.get('/checkout/subscription', async (req, res) => {
                 street: '1, Random address',
                 zipcode: '2000',
             },
-            customer: { email: 'test@example.com', name: 'Customer Name' },
+            customer: { email: user.email, name: user.name || user.email },
             payment_link: true,
             product_id: productId,
             quantity: 1,
@@ -339,12 +350,17 @@ router.get('/debug', (_req, res) => {
 // GET /api/payments/checkout/subscription/plan?plan=monthly|yearly[&returnPath=/profile]
 // Uses environment variables to map plan -> product_id
 //   DODO_MONTHLY_PRODUCT_ID, DODO_YEARLY_PRODUCT_ID
-router.get('/checkout/subscription/plan', async (req, res) => {
+router.get('/checkout/subscription/plan', auth_1.default, async (req, res) => {
     try {
         const plan = String(req.query.plan || '').toLowerCase();
         const returnPath = typeof req.query.returnPath === 'string' ? req.query.returnPath : '/profile';
         const monthlyId = process.env.DODO_MONTHLY_PRODUCT_ID;
         const yearlyId = process.env.DODO_YEARLY_PRODUCT_ID;
+        // Identify current user to pass correct email/name to Dodo
+        const userId = req.userId;
+        const user = userId ? await User_1.default.findById(userId).select('email name') : null;
+        if (!user)
+            return res.status(401).json({ error: 'Unauthorized' });
         let productId;
         if (plan === 'monthly')
             productId = monthlyId || undefined;
@@ -369,7 +385,7 @@ router.get('/checkout/subscription/plan', async (req, res) => {
                 street: '1, Random address',
                 zipcode: '2000',
             },
-            customer: { email: 'test@example.com', name: 'Customer Name' },
+            customer: { email: user.email, name: user.name || user.email },
             payment_link: true,
             product_id: productId,
             quantity: 1,
