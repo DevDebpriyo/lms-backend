@@ -207,7 +207,7 @@ router.post('/webhook', async (req, res) => {
                 case 'subscription.active': {
                     const subscription = await dodopayments_1.default.subscriptions.retrieve(payload.data.subscription_id);
                     console.log('-------SUBSCRIPTION DATA START ---------');
-                    console.log(subscription);
+                    console.log(JSON.stringify(subscription, null, 2));
                     console.log('-------SUBSCRIPTION DATA END ---------');
                     // Update user's subscription based on customer email
                     const email = subscription?.customer?.email || undefined;
@@ -215,6 +215,13 @@ router.post('/webhook', async (req, res) => {
                         const plan = (0, dodo_1.mapProductToPlan)(subscription.product_id) ||
                             (0, dodo_1.inferPlanFromInterval)(subscription.subscription_period_interval) ||
                             (0, dodo_1.inferPlanFromInterval)(subscription.payment_frequency_interval);
+                        console.log('[webhook] subscription.active - mapping details:', {
+                            product_id: subscription?.product_id,
+                            subscription_period_interval: subscription?.subscription_period_interval,
+                            payment_frequency_interval: subscription?.payment_frequency_interval,
+                            mapped_plan: plan,
+                            inferred_interval: (0, dodo_1.inferPlanFromInterval)(subscription?.subscription_period_interval) || (0, dodo_1.inferPlanFromInterval)(subscription?.payment_frequency_interval),
+                        });
                         const update = {
                             billing: {
                                 country: subscription?.billing?.country || undefined,
@@ -239,7 +246,13 @@ router.post('/webhook', async (req, res) => {
                                 updatedAt: new Date(),
                             },
                         };
-                        await User_1.default.findOneAndUpdate({ email: email.toLowerCase() }, { $set: update }, { new: true });
+                        console.log('[webhook] Updating user with email:', email.toLowerCase());
+                        console.log('[webhook] Update payload:', JSON.stringify(update, null, 2));
+                        const updatedUser = await User_1.default.findOneAndUpdate({ email: email.toLowerCase() }, { $set: update }, { new: true });
+                        console.log('[webhook] User updated successfully:', updatedUser ? 'YES' : 'NO - USER NOT FOUND');
+                    }
+                    else {
+                        console.log('[webhook] No email found in subscription data - skipping update');
                     }
                     break;
                 }
@@ -303,10 +316,19 @@ router.post('/webhook', async (req, res) => {
                         // If this payment references a subscription, retrieve full subscription details
                         if (payment?.subscription_id) {
                             try {
+                                console.log('[webhook] payment.succeeded - fetching subscription:', payment.subscription_id);
                                 const subscription = await dodopayments_1.default.subscriptions.retrieve(payment.subscription_id);
+                                console.log('[webhook] payment.succeeded - subscription retrieved:', JSON.stringify(subscription, null, 2));
                                 const plan = (0, dodo_1.mapProductToPlan)(subscription.product_id) ||
                                     (0, dodo_1.inferPlanFromInterval)(subscription.subscription_period_interval) ||
                                     (0, dodo_1.inferPlanFromInterval)(subscription.payment_frequency_interval);
+                                console.log('[webhook] payment.succeeded - mapping details:', {
+                                    product_id: subscription?.product_id,
+                                    subscription_period_interval: subscription?.subscription_period_interval,
+                                    payment_frequency_interval: subscription?.payment_frequency_interval,
+                                    mapped_plan: plan,
+                                    inferred_interval: (0, dodo_1.inferPlanFromInterval)(subscription?.subscription_period_interval) || (0, dodo_1.inferPlanFromInterval)(subscription?.payment_frequency_interval),
+                                });
                                 update.subscription.isActive = subscription?.status === 'active';
                                 update.subscription.subscriptionId = subscription?.subscription_id || payment.subscription_id;
                                 update.subscription.plan = plan || null;
@@ -318,10 +340,14 @@ router.post('/webhook', async (req, res) => {
                                 update.subscription.previousBillingDate = subscription?.previous_billing_date ? new Date(subscription.previous_billing_date) : null;
                                 update.subscription.createdAt = subscription?.created_at ? new Date(subscription.created_at) : null;
                                 update.subscription.cancelAtPeriodEnd = typeof subscription?.cancel_at_next_billing_date === 'boolean' ? subscription.cancel_at_next_billing_date : null;
+                                console.log('[webhook] payment.succeeded - subscription fields to update:', update.subscription);
                             }
                             catch (subErr) {
-                                console.log('Failed to retrieve subscription details in payment.succeeded', subErr);
+                                console.log('[webhook] payment.succeeded - Failed to retrieve subscription:', subErr);
                             }
+                        }
+                        else {
+                            console.log('[webhook] payment.succeeded - No subscription_id in payment');
                         }
                         await User_1.default.findOneAndUpdate({ email: email.toLowerCase() }, { $set: update }, { new: true });
                     }

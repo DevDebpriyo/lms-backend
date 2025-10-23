@@ -185,7 +185,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
         case 'subscription.active': {
           const subscription = await dodopayments.subscriptions.retrieve(payload.data.subscription_id);
           console.log('-------SUBSCRIPTION DATA START ---------');
-          console.log(subscription);
+          console.log(JSON.stringify(subscription, null, 2));
           console.log('-------SUBSCRIPTION DATA END ---------');
           // Update user's subscription based on customer email
           const email: string | undefined = subscription?.customer?.email || undefined;
@@ -194,6 +194,14 @@ router.post('/webhook', async (req: Request, res: Response) => {
               mapProductToPlan(subscription.product_id) ||
               inferPlanFromInterval(subscription.subscription_period_interval) ||
               inferPlanFromInterval(subscription.payment_frequency_interval);
+
+            console.log('[webhook] subscription.active - mapping details:', {
+              product_id: subscription?.product_id,
+              subscription_period_interval: subscription?.subscription_period_interval,
+              payment_frequency_interval: subscription?.payment_frequency_interval,
+              mapped_plan: plan,
+              inferred_interval: inferPlanFromInterval(subscription?.subscription_period_interval) || inferPlanFromInterval(subscription?.payment_frequency_interval),
+            });
 
             const update: any = {
               billing: {
@@ -220,11 +228,18 @@ router.post('/webhook', async (req: Request, res: Response) => {
               },
             };
 
-            await User.findOneAndUpdate(
+            console.log('[webhook] Updating user with email:', email.toLowerCase());
+            console.log('[webhook] Update payload:', JSON.stringify(update, null, 2));
+
+            const updatedUser = await User.findOneAndUpdate(
               { email: email.toLowerCase() },
               { $set: update },
               { new: true }
             );
+
+            console.log('[webhook] User updated successfully:', updatedUser ? 'YES' : 'NO - USER NOT FOUND');
+          } else {
+            console.log('[webhook] No email found in subscription data - skipping update');
           }
           break;
         }
@@ -291,11 +306,22 @@ router.post('/webhook', async (req: Request, res: Response) => {
             // If this payment references a subscription, retrieve full subscription details
             if (payment?.subscription_id) {
               try {
+                console.log('[webhook] payment.succeeded - fetching subscription:', payment.subscription_id);
                 const subscription = await dodopayments.subscriptions.retrieve(payment.subscription_id);
+                console.log('[webhook] payment.succeeded - subscription retrieved:', JSON.stringify(subscription, null, 2));
+
                 const plan =
                   mapProductToPlan(subscription.product_id) ||
                   inferPlanFromInterval(subscription.subscription_period_interval) ||
                   inferPlanFromInterval(subscription.payment_frequency_interval);
+
+                console.log('[webhook] payment.succeeded - mapping details:', {
+                  product_id: subscription?.product_id,
+                  subscription_period_interval: subscription?.subscription_period_interval,
+                  payment_frequency_interval: subscription?.payment_frequency_interval,
+                  mapped_plan: plan,
+                  inferred_interval: inferPlanFromInterval(subscription?.subscription_period_interval) || inferPlanFromInterval(subscription?.payment_frequency_interval),
+                });
 
                 update.subscription.isActive = subscription?.status === 'active';
                 update.subscription.subscriptionId = subscription?.subscription_id || payment.subscription_id;
@@ -308,9 +334,13 @@ router.post('/webhook', async (req: Request, res: Response) => {
                 update.subscription.previousBillingDate = subscription?.previous_billing_date ? new Date(subscription.previous_billing_date) : null;
                 update.subscription.createdAt = subscription?.created_at ? new Date(subscription.created_at) : null;
                 update.subscription.cancelAtPeriodEnd = typeof subscription?.cancel_at_next_billing_date === 'boolean' ? subscription.cancel_at_next_billing_date : null;
+
+                console.log('[webhook] payment.succeeded - subscription fields to update:', update.subscription);
               } catch (subErr) {
-                console.log('Failed to retrieve subscription details in payment.succeeded', subErr);
+                console.log('[webhook] payment.succeeded - Failed to retrieve subscription:', subErr);
               }
+            } else {
+              console.log('[webhook] payment.succeeded - No subscription_id in payment');
             }
 
             await User.findOneAndUpdate(
