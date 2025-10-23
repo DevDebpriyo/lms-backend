@@ -11,6 +11,31 @@ const UserSchema = new mongoose_1.Schema({
     password: { type: String, required: true },
     avatar: { type: String },
     refreshToken: { type: String },
+    billing: {
+        country: { type: String },
+        state: { type: String },
+        city: { type: String },
+        street: { type: String },
+        zipcode: { type: String },
+    },
+    subscription: {
+        isActive: { type: Boolean, default: false },
+        plan: { type: String, enum: ['monthly', 'yearly', null], default: null },
+        productId: { type: String, default: null },
+        subscriptionId: { type: String, default: null },
+        status: { type: String, default: null },
+        currency: { type: String, default: null },
+        nextBillingDate: { type: Date, default: null },
+        previousBillingDate: { type: Date, default: null },
+        createdAt: { type: Date, default: null },
+        lastPaymentId: { type: String, default: null },
+        paymentMethod: { type: String, default: null },
+        cardLast4: { type: String, default: null },
+        cardNetwork: { type: String, default: null },
+        cardType: { type: String, default: null },
+        dodoCustomerId: { type: String, default: null },
+        updatedAt: { type: Date, default: null },
+    },
 }, { timestamps: true });
 // Hash password before saving
 UserSchema.pre('save', async function (next) {

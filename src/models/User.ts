@@ -7,6 +7,31 @@ export interface IUser extends Document {
   password: string;
   avatar?: string;
   refreshToken?: string;
+  billing?: {
+    country?: string;
+    state?: string;
+    city?: string;
+    street?: string;
+    zipcode?: string;
+  };
+  subscription?: {
+    isActive: boolean;
+    plan?: 'monthly' | 'yearly' | null;
+    productId?: string | null;
+    subscriptionId?: string | null;
+    status?: string | null;
+    currency?: string | null;
+    nextBillingDate?: Date | null;
+    previousBillingDate?: Date | null;
+    createdAt?: Date | null;
+    lastPaymentId?: string | null;
+    paymentMethod?: string | null;
+    cardLast4?: string | null;
+    cardNetwork?: string | null;
+    cardType?: string | null;
+    dodoCustomerId?: string | null;
+    updatedAt?: Date | null;
+  };
   comparePassword(candidate: string): Promise<boolean>;
 }
 
@@ -17,6 +42,31 @@ const UserSchema = new Schema<IUser>(
     password: { type: String, required: true },
     avatar: { type: String },
     refreshToken: { type: String },
+    billing: {
+      country: { type: String },
+      state: { type: String },
+      city: { type: String },
+      street: { type: String },
+      zipcode: { type: String },
+    },
+    subscription: {
+      isActive: { type: Boolean, default: false },
+      plan: { type: String, enum: ['monthly', 'yearly', null], default: null },
+      productId: { type: String, default: null },
+      subscriptionId: { type: String, default: null },
+      status: { type: String, default: null },
+      currency: { type: String, default: null },
+      nextBillingDate: { type: Date, default: null },
+      previousBillingDate: { type: Date, default: null },
+      createdAt: { type: Date, default: null },
+      lastPaymentId: { type: String, default: null },
+      paymentMethod: { type: String, default: null },
+      cardLast4: { type: String, default: null },
+      cardNetwork: { type: String, default: null },
+      cardType: { type: String, default: null },
+      dodoCustomerId: { type: String, default: null },
+      updatedAt: { type: Date, default: null },
+    },
   },
   { timestamps: true }
 );

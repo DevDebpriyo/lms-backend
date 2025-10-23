@@ -39,11 +39,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const standardwebhooks_1 = require("standardwebhooks");
 const dodopayments_1 = __importStar(require("../services/dodopayments"));
+const User_1 = __importDefault(require("../models/User"));
+const dodo_1 = require("../utils/dodo");
 const url_1 = require("../utils/url");
 const router = express_1.default.Router();
 const webhookSecret = process.env.DODO_PAYMENTS_WEBHOOK_KEY;
 const webhook = webhookSecret ? new standardwebhooks_1.Webhook(webhookSecret) : null;
 const RETURN_URL = (0, url_1.getFrontendBaseUrl)();
+const DEFAULT_RETURN_PATH = process.env.DODO_RETURN_PATH || '/profile';
+function resolveReturnUrl(req, fallbackPath = DEFAULT_RETURN_PATH) {
+    const returnPathParam = typeof req.query.returnPath === 'string' ? req.query.returnPath : undefined;
+    const path = returnPathParam || fallbackPath;
+    return (0, url_1.buildReturnUrl)(path);
+}
 // GET /api/payments/products
 router.get('/products', async (_req, res) => {
     try {
@@ -133,7 +141,7 @@ router.get('/checkout/onetime', async (req, res) => {
             customer: { email: '', name: '' },
             payment_link: true,
             product_cart: [productWithQuantity],
-            return_url: (0, url_1.buildReturnUrl)('/profile'),
+            return_url: resolveReturnUrl(req),
         });
         res.json(response);
     }
@@ -160,7 +168,7 @@ router.get('/checkout/subscription', async (req, res) => {
             payment_link: true,
             product_id: productId,
             quantity: 1,
-            return_url: (0, url_1.buildReturnUrl)('/profile'),
+            return_url: resolveReturnUrl(req),
         });
         res.json(response);
     }
@@ -190,12 +198,63 @@ router.post('/webhook', async (req, res) => {
                     console.log('-------SUBSCRIPTION DATA START ---------');
                     console.log(subscription);
                     console.log('-------SUBSCRIPTION DATA END ---------');
+                    // Update user's subscription based on customer email
+                    const email = subscription?.customer?.email || undefined;
+                    if (email) {
+                        const plan = (0, dodo_1.mapProductToPlan)(subscription.product_id) ||
+                            (0, dodo_1.inferPlanFromInterval)(subscription.subscription_period_interval) ||
+                            (0, dodo_1.inferPlanFromInterval)(subscription.payment_frequency_interval);
+                        const update = {
+                            billing: {
+                                country: subscription?.billing?.country || undefined,
+                                state: subscription?.billing?.state || undefined,
+                                city: subscription?.billing?.city || undefined,
+                                street: subscription?.billing?.street || undefined,
+                                zipcode: subscription?.billing?.zipcode || undefined,
+                            },
+                            subscription: {
+                                isActive: subscription?.status === 'active',
+                                plan: plan || null,
+                                productId: subscription?.product_id || null,
+                                subscriptionId: subscription?.subscription_id || null,
+                                status: subscription?.status || null,
+                                currency: subscription?.currency || null,
+                                nextBillingDate: subscription?.next_billing_date ? new Date(subscription.next_billing_date) : null,
+                                previousBillingDate: subscription?.previous_billing_date ? new Date(subscription.previous_billing_date) : null,
+                                createdAt: subscription?.created_at ? new Date(subscription.created_at) : null,
+                                dodoCustomerId: subscription?.customer?.customer_id || null,
+                                updatedAt: new Date(),
+                            },
+                        };
+                        await User_1.default.findOneAndUpdate({ email: email.toLowerCase() }, { $set: update }, { new: true });
+                    }
                     break;
                 }
                 case 'subscription.failed':
                 case 'subscription.cancelled':
                 case 'subscription.renewed':
                 case 'subscription.on_hold':
+                    // Handle status changes: mark inactive on cancelled/failed
+                    try {
+                        const sid = payload?.data?.subscription_id;
+                        if (sid) {
+                            const subscription = await dodopayments_1.default.subscriptions.retrieve(sid);
+                            const email = subscription?.customer?.email || undefined;
+                            if (email) {
+                                const inactive = payload.type === 'subscription.cancelled' || payload.type === 'subscription.failed';
+                                await User_1.default.findOneAndUpdate({ email: email.toLowerCase() }, {
+                                    $set: {
+                                        'subscription.status': subscription?.status || payload.type.split('.')[1],
+                                        'subscription.isActive': !inactive && subscription?.status === 'active',
+                                        'subscription.updatedAt': new Date(),
+                                    },
+                                }, { new: true });
+                            }
+                        }
+                    }
+                    catch (e) {
+                        console.log('Subscription status update error', e);
+                    }
                 default:
                     break;
             }
@@ -207,7 +266,34 @@ router.post('/webhook', async (req, res) => {
                     console.log('-------PAYMENT DATA START ---------');
                     console.log(payment);
                     console.log('-------PAYMENT DATA END ---------');
-                    // TODO: mark order/user entitlement in DB
+                    // Update user with last payment details; associate with subscription if present
+                    const email = payment?.customer?.email || undefined;
+                    if (email) {
+                        const update = {
+                            billing: {
+                                country: payment?.billing?.country || undefined,
+                                state: payment?.billing?.state || undefined,
+                                city: payment?.billing?.city || undefined,
+                                street: payment?.billing?.street || undefined,
+                                zipcode: payment?.billing?.zipcode || undefined,
+                            },
+                            subscription: {
+                                lastPaymentId: payment?.payment_id || null,
+                                paymentMethod: payment?.payment_method || null,
+                                cardLast4: payment?.card_last_four || null,
+                                cardNetwork: payment?.card_network || null,
+                                cardType: payment?.card_type || null,
+                                dodoCustomerId: payment?.customer?.customer_id || null,
+                                updatedAt: new Date(),
+                            },
+                        };
+                        // If this payment references a subscription, ensure isActive true
+                        if (payment?.subscription_id) {
+                            update.subscription.isActive = true;
+                            update.subscription.subscriptionId = payment.subscription_id;
+                        }
+                        await User_1.default.findOneAndUpdate({ email: email.toLowerCase() }, { $set: update }, { new: true });
+                    }
                     break;
                 }
                 default:
@@ -244,7 +330,9 @@ router.get('/debug', (_req, res) => {
         using: dodopayments_1.dodoMeta.using,
         has_live_key: dodopayments_1.dodoMeta.hasLiveKey,
         has_test_key: dodopayments_1.dodoMeta.hasTestKey,
-        return_url: (0, url_1.buildReturnUrl)('/profile'),
+        return_base: RETURN_URL,
+        default_return_path: DEFAULT_RETURN_PATH,
+        default_return_url: (0, url_1.buildReturnUrl)(DEFAULT_RETURN_PATH),
     });
 });
 // GET /api/payments/checkout/subscription/plan?plan=monthly|yearly[&returnPath=/profile]
