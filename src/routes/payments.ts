@@ -288,10 +288,29 @@ router.post('/webhook', async (req: Request, res: Response) => {
               },
             };
 
-            // If this payment references a subscription, ensure isActive true
+            // If this payment references a subscription, retrieve full subscription details
             if (payment?.subscription_id) {
-              update.subscription.isActive = true;
-              update.subscription.subscriptionId = payment.subscription_id;
+              try {
+                const subscription = await dodopayments.subscriptions.retrieve(payment.subscription_id);
+                const plan =
+                  mapProductToPlan(subscription.product_id) ||
+                  inferPlanFromInterval(subscription.subscription_period_interval) ||
+                  inferPlanFromInterval(subscription.payment_frequency_interval);
+
+                update.subscription.isActive = subscription?.status === 'active';
+                update.subscription.subscriptionId = subscription?.subscription_id || payment.subscription_id;
+                update.subscription.plan = plan || null;
+                update.subscription.interval = plan ? (plan === 'yearly' ? 'year' : 'month') : (inferPlanFromInterval(subscription?.subscription_period_interval) || inferPlanFromInterval(subscription?.payment_frequency_interval)) || null;
+                update.subscription.productId = subscription?.product_id || null;
+                update.subscription.status = subscription?.status || null;
+                update.subscription.currency = subscription?.currency || null;
+                update.subscription.nextBillingDate = subscription?.next_billing_date ? new Date(subscription.next_billing_date) : null;
+                update.subscription.previousBillingDate = subscription?.previous_billing_date ? new Date(subscription.previous_billing_date) : null;
+                update.subscription.createdAt = subscription?.created_at ? new Date(subscription.created_at) : null;
+                update.subscription.cancelAtPeriodEnd = typeof subscription?.cancel_at_next_billing_date === 'boolean' ? subscription.cancel_at_next_billing_date : null;
+              } catch (subErr) {
+                console.log('Failed to retrieve subscription details in payment.succeeded', subErr);
+              }
             }
 
             await User.findOneAndUpdate(
