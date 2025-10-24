@@ -10,5 +10,7 @@ router.post('/rephrase-options', modelController.rephraseOptions);
 router.post('/ai-score', modelController.aiScore);
 // POST /api/model/plagiarism-check
 router.post('/plagiarism-check', modelController.plagiarismCheck);
+// POST /api/model/tone-rewrite
+router.post('/tone-rewrite', modelController.toneRewrite);
 
 export default router;
