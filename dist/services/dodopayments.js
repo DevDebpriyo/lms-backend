@@ -5,6 +5,22 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.dodopayments = exports.dodoMeta = void 0;
 const dodopayments_1 = __importDefault(require("dodopayments"));
+const dotenv_1 = __importDefault(require("dotenv"));
+// Ensure local .env is loaded when this module is required early (e.g. before server.ts runs dotenv)
+// This mirrors server.ts behavior: use .env.prod in production, .env otherwise.
+if (!process.env.DODO_API_KEY_TEST && !process.env.DODO_API_KEY_LIVE && !process.env.DODO_PAYMENTS_API_KEY) {
+    try {
+        if (process.env.NODE_ENV === 'production') {
+            dotenv_1.default.config({ path: '.env.prod' });
+        }
+        else {
+            dotenv_1.default.config({ path: '.env' });
+        }
+    }
+    catch (e) {
+        // ignore - config is best-effort
+    }
+}
 // Flexible environment selection:
 // - DODO_ENV=test|live overrides mode.
 // - Else if DODO_API_KEY_LIVE exists, use live_mode; otherwise use test_mode.
