@@ -4,7 +4,9 @@ import bcrypt from 'bcrypt';
 export interface IUser extends Document {
   name: string;
   email: string;
-  password: string;
+  password?: string; // Optional for Google OAuth users
+  googleId?: string; // Google OAuth user ID
+  emailVerified?: boolean; // Email verification status
   avatar?: string;
   refreshToken?: string;
   billing?: {
@@ -41,7 +43,9 @@ const UserSchema = new Schema<IUser>(
   {
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true },
-    password: { type: String, required: true },
+    password: { type: String }, // Not required for Google OAuth users
+    googleId: { type: String, unique: true, sparse: true }, // Google OAuth user ID
+    emailVerified: { type: Boolean, default: false }, // Email verification status
     avatar: { type: String },
     refreshToken: { type: String },
     billing: {
@@ -75,10 +79,10 @@ const UserSchema = new Schema<IUser>(
   { timestamps: true }
 );
 
-// Hash password before saving
+// Hash password before saving (only if password exists and is modified)
 UserSchema.pre('save', async function (next) {
   const user = this as IUser;
-  if (!user.isModified('password')) return next();
+  if (!user.password || !user.isModified('password')) return next();
   const salt = await bcrypt.genSalt(10);
   user.password = await bcrypt.hash(user.password, salt);
   next();
@@ -86,6 +90,7 @@ UserSchema.pre('save', async function (next) {
 
 UserSchema.methods.comparePassword = function (candidate: string) {
   const user = this as IUser;
+  if (!user.password) return Promise.resolve(false);
   return bcrypt.compare(candidate, user.password);
 };
 

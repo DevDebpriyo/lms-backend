@@ -4,3 +4,4 @@
 !.env.example
 
 # example files
+*.md

@@ -8,7 +8,9 @@ const bcrypt_1 = __importDefault(require("bcrypt"));
 const UserSchema = new mongoose_1.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true },
-    password: { type: String, required: true },
+    password: { type: String }, // Not required for Google OAuth users
+    googleId: { type: String, unique: true, sparse: true }, // Google OAuth user ID
+    emailVerified: { type: Boolean, default: false }, // Email verification status
     avatar: { type: String },
     refreshToken: { type: String },
     billing: {
@@ -39,10 +41,10 @@ const UserSchema = new mongoose_1.Schema({
         updatedAt: { type: Date, default: null },
     },
 }, { timestamps: true });
-// Hash password before saving
+// Hash password before saving (only if password exists and is modified)
 UserSchema.pre('save', async function (next) {
     const user = this;
-    if (!user.isModified('password'))
+    if (!user.password || !user.isModified('password'))
         return next();
     const salt = await bcrypt_1.default.genSalt(10);
     user.password = await bcrypt_1.default.hash(user.password, salt);
@@ -50,6 +52,8 @@ UserSchema.pre('save', async function (next) {
 });
 UserSchema.methods.comparePassword = function (candidate) {
     const user = this;
+    if (!user.password)
+        return Promise.resolve(false);
     return bcrypt_1.default.compare(candidate, user.password);
 };
 exports.default = (0, mongoose_1.model)('User', UserSchema);

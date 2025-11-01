@@ -3,12 +3,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.me = exports.logout = exports.refreshAccessToken = exports.login = exports.register = void 0;
+exports.googleAuthToken = exports.googleAuthCallback = exports.googleAuthStart = exports.me = exports.logout = exports.refreshAccessToken = exports.login = exports.register = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const crypto_1 = __importDefault(require("crypto"));
 // Helper to coerce env strings to the type expected by jsonwebtoken for expiresIn
 const asExpires = (value, fallback) => (value ?? fallback);
 const User_1 = __importDefault(require("../models/User"));
 const dodo_1 = require("../utils/dodo");
+const googleAuth_1 = require("../services/googleAuth");
 const createAccessToken = (userId) => {
     const secret = process.env.JWT_SECRET;
     const options = {
@@ -39,7 +41,7 @@ const register = async (req, res) => {
         const existing = await User_1.default.findOne({ email });
         if (existing)
             return res.status(400).json({ message: 'Email already in use' });
-        const user = await User_1.default.create({ name, email, password });
+        const user = await User_1.default.create({ name, email, password, emailVerified: false });
         const accessToken = createAccessToken(user.id);
         const refreshToken = createRefreshToken(user.id);
         user.refreshToken = refreshToken;
@@ -196,3 +198,170 @@ const me = async (req, res) => {
     }
 };
 exports.me = me;
+// ==================== Google OAuth Endpoints ====================
+/**
+ * GET /api/auth/google/start
+ * Redirects user to Google OAuth consent screen
+ */
+const googleAuthStart = async (_req, res) => {
+    try {
+        // Generate anti-CSRF state token
+        const state = crypto_1.default.randomBytes(32).toString('hex');
+        // Store state in a cookie to verify on callback
+        res.cookie('oauth_state', state, {
+            httpOnly: true,
+            secure: isProd,
+            sameSite: isProd ? 'none' : 'lax',
+            maxAge: 10 * 60 * 1000, // 10 minutes
+            path: '/',
+        });
+        const authUrl = (0, googleAuth_1.getGoogleAuthUrl)(state);
+        res.redirect(authUrl);
+    }
+    catch (err) {
+        console.error('Google auth start error:', err);
+        res.status(500).json({ message: 'Failed to initiate Google authentication' });
+    }
+};
+exports.googleAuthStart = googleAuthStart;
+/**
+ * GET /api/auth/google/callback?code=...&state=...
+ * Exchange authorization code for tokens and create session
+ */
+const googleAuthCallback = async (req, res) => {
+    try {
+        const { code, state } = req.query;
+        const storedState = req.cookies.oauth_state;
+        // Verify state parameter to prevent CSRF
+        if (!state || !storedState || state !== storedState) {
+            return res.redirect(`${process.env.FRONTEND_URL}?error=invalid_state`);
+        }
+        // Clear state cookie
+        res.clearCookie('oauth_state', {
+            httpOnly: true,
+            secure: isProd,
+            sameSite: isProd ? 'none' : 'lax',
+            path: '/',
+        });
+        if (!code || typeof code !== 'string') {
+            return res.redirect(`${process.env.FRONTEND_URL}?error=no_code`);
+        }
+        // Exchange code for tokens and get profile
+        const profile = await (0, googleAuth_1.exchangeCodeForTokens)(code);
+        // Upsert user
+        let user = await User_1.default.findOne({ googleId: profile.sub });
+        if (!user) {
+            // Check if user exists with same email
+            user = await User_1.default.findOne({ email: profile.email });
+            if (user) {
+                // Link Google account to existing user
+                user.googleId = profile.sub;
+                user.emailVerified = profile.email_verified || user.emailVerified || false;
+                if (profile.picture && !user.avatar)
+                    user.avatar = profile.picture;
+                await user.save();
+            }
+            else {
+                // Create new user
+                user = await User_1.default.create({
+                    googleId: profile.sub,
+                    email: profile.email,
+                    name: profile.name,
+                    avatar: profile.picture,
+                    emailVerified: profile.email_verified || false,
+                });
+            }
+        }
+        else {
+            // Update existing Google user
+            user.name = profile.name;
+            user.avatar = profile.picture || user.avatar;
+            user.emailVerified = profile.email_verified || user.emailVerified || false;
+            await user.save();
+        }
+        // Create session
+        const accessToken = createAccessToken(user.id);
+        const refreshToken = createRefreshToken(user.id);
+        user.refreshToken = refreshToken;
+        await user.save();
+        res.cookie('refreshToken', refreshToken, refreshCookieOptions);
+        // Redirect to frontend with success
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+        res.redirect(`${frontendUrl}/features`);
+    }
+    catch (err) {
+        console.error('Google auth callback error:', err);
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+        res.redirect(`${frontendUrl}?error=auth_failed`);
+    }
+};
+exports.googleAuthCallback = googleAuthCallback;
+/**
+ * POST /api/auth/google
+ * Simplified Google One Tap / ID Token flow
+ * Body: { credential: string }
+ * Response: { ok: true, user, accessToken }
+ */
+const googleAuthToken = async (req, res) => {
+    try {
+        const { credential } = req.body;
+        if (!credential || typeof credential !== 'string') {
+            return res.status(400).json({ message: 'Missing or invalid credential' });
+        }
+        // Verify ID token
+        const profile = await (0, googleAuth_1.verifyGoogleIdToken)(credential);
+        // Upsert user
+        let user = await User_1.default.findOne({ googleId: profile.sub });
+        if (!user) {
+            // Check if user exists with same email
+            user = await User_1.default.findOne({ email: profile.email });
+            if (user) {
+                // Link Google account to existing user
+                user.googleId = profile.sub;
+                user.emailVerified = profile.email_verified || user.emailVerified || false;
+                if (profile.picture && !user.avatar)
+                    user.avatar = profile.picture;
+                await user.save();
+            }
+            else {
+                // Create new user
+                user = await User_1.default.create({
+                    googleId: profile.sub,
+                    email: profile.email,
+                    name: profile.name,
+                    avatar: profile.picture,
+                    emailVerified: profile.email_verified || false,
+                });
+            }
+        }
+        else {
+            // Update existing Google user
+            user.name = profile.name;
+            user.avatar = profile.picture || user.avatar;
+            user.emailVerified = profile.email_verified || user.emailVerified || false;
+            await user.save();
+        }
+        // Create session
+        const accessToken = createAccessToken(user.id);
+        const refreshToken = createRefreshToken(user.id);
+        user.refreshToken = refreshToken;
+        await user.save();
+        res.cookie('refreshToken', refreshToken, refreshCookieOptions);
+        res.json({
+            ok: true,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                avatar: user.avatar,
+                emailVerified: user.emailVerified,
+            },
+            accessToken,
+        });
+    }
+    catch (err) {
+        console.error('Google auth token error:', err);
+        res.status(400).json({ message: 'Invalid Google credential' });
+    }
+};
+exports.googleAuthToken = googleAuthToken;
