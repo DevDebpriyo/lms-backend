@@ -14,6 +14,8 @@ const db_1 = __importDefault(require("./config/db"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const model_1 = __importDefault(require("./routes/model"));
 const payments_1 = __importDefault(require("./routes/payments"));
+const apiKeys_1 = __importDefault(require("./routes/apiKeys"));
+const model_2 = __importDefault(require("./routes/v1/model"));
 // Load environment variables.
 // Use `.env.prod` for production and `.env` for development (these files exist in the repo).
 if (process.env.NODE_ENV === 'production') {
@@ -61,6 +63,10 @@ app.use('/auth', auth_1.default);
 app.use('/api/model', model_1.default);
 // payments routes
 app.use('/api/payments', payments_1.default);
+// API key management (requires user auth via JWT)
+app.use('/api/keys', apiKeys_1.default);
+// Public developer API (v1) guarded by API keys
+app.use('/v1', model_2.default);
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 const PORT = process.env.PORT || 5000;
 const start = async () => {

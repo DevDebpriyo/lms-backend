@@ -9,6 +9,8 @@ import connectDB from './config/db';
 import authRoutes from './routes/auth';
 import modelRoutes from './routes/model';
 import paymentsRoutes from './routes/payments';
+import apiKeysRoutes from './routes/apiKeys';
+import v1ModelRoutes from './routes/v1/model';
 
 // Load environment variables.
 // Use `.env.prod` for production and `.env` for development (these files exist in the repo).
@@ -65,6 +67,12 @@ app.use('/auth', authRoutes);
 app.use('/api/model', modelRoutes);
 // payments routes
 app.use('/api/payments', paymentsRoutes);
+
+// API key management (requires user auth via JWT)
+app.use('/api/keys', apiKeysRoutes);
+
+// Public developer API (v1) guarded by API keys
+app.use('/v1', v1ModelRoutes);
 
 app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
 
