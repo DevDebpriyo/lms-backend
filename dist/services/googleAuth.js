@@ -35,8 +35,10 @@ async function verifyGoogleIdToken(idToken) {
         if (!payload.exp || payload.exp < now) {
             throw new Error('Token expired');
         }
-        // Verify issued at time
-        if (!payload.iat || payload.iat > now) {
+        // Verify issued at time with clock skew tolerance (local clocks can drift)
+        const CLOCK_SKEW = Number(process.env.GOOGLE_OIDC_CLOCK_SKEW ?? 300); // seconds, default 5 min
+        const iat = typeof payload.iat === 'number' ? payload.iat : undefined;
+        if (!iat || iat - now > CLOCK_SKEW) {
             throw new Error('Invalid issued at time');
         }
         return {

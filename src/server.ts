@@ -10,6 +10,7 @@ import authRoutes from './routes/auth';
 import modelRoutes from './routes/model';
 import paymentsRoutes from './routes/payments';
 import apiKeysRoutes from './routes/apiKeys';
+import usageRoutes from './routes/usage';
 import v1ModelRoutes from './routes/v1/model';
 
 // Load environment variables.
@@ -70,6 +71,8 @@ app.use('/api/payments', paymentsRoutes);
 
 // API key management (requires user auth via JWT)
 app.use('/api/keys', apiKeysRoutes);
+// Usage reporting
+app.use('/api/usage', usageRoutes);
 
 // Public developer API (v1) guarded by API keys
 app.use('/v1', v1ModelRoutes);

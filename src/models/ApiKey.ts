@@ -47,9 +47,9 @@ const ApiKeySchema = new Schema<IApiKey>(
       max: { type: Number, default: 60 },
     },
     quota: {
-      monthly: { type: Number, default: 10_000 },
-      usedThisMonth: { type: Number, default: 0 },
-      periodStart: { type: Date, default: () => new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
+      monthly: { type: Number, default: 50_000 }, // characters per month for free plan
+      usedThisMonth: { type: Number, default: 0 }, // legacy field (not used with Usage collection)
+      periodStart: { type: Date, default: () => new Date(new Date().getFullYear(), new Date().getMonth(), 1) }, // legacy
     },
 
     lastUsedAt: { type: Date },
