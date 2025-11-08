@@ -14,9 +14,9 @@ const ApiKeySchema = new mongoose_1.Schema({
         max: { type: Number, default: 60 },
     },
     quota: {
-        monthly: { type: Number, default: 10000 },
-        usedThisMonth: { type: Number, default: 0 },
-        periodStart: { type: Date, default: () => new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
+        monthly: { type: Number, default: 50000 }, // characters per month for free plan
+        usedThisMonth: { type: Number, default: 0 }, // legacy field (not used with Usage collection)
+        periodStart: { type: Date, default: () => new Date(new Date().getFullYear(), new Date().getMonth(), 1) }, // legacy
     },
     lastUsedAt: { type: Date },
     revoked: {
